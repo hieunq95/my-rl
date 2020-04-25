@@ -1,1 +1,1 @@
-# Implementation of reinforcement learning algorithms by me
+## Implementation of reinforcement learning algorithms
