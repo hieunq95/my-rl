@@ -138,6 +138,6 @@ dmypy.json
 cython_debug/
 
 # experiments results
-/experiments/results/*
+/experiments/results/*.json
 .DS_Store
 .idea/
