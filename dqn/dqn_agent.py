@@ -62,19 +62,18 @@ class ReplayBuffer(object):
 class Agent(object):
     def __init__(self, alpha, gamma, n_actions, epsilon, batch_size,
                  input_dims, epsilon_dec=1e-5, epsilon_end=0.01,
-                 mem_size=1000000, replace=10000, fname='dqn_model.h5'):
+                 mem_size=1000000, replace=10000):
         self.action_space = [i for i in range(n_actions)]
         self.gamma = gamma
         self.epsilon = epsilon
         self.epsilon_dec = epsilon_dec
         self.epsilon_min = epsilon_end
         self.batch_size = batch_size
-        self.model_file = fname
         self.replace = replace
         self.learn_step = 0
         self.memory = ReplayBuffer(mem_size, input_dims, n_actions, discrete=True)
-        self.q_eval = build_dqn(alpha, n_actions, input_dims, 32, 32)
-        self.q_next = build_dqn(alpha, n_actions, input_dims, 32, 32)
+        self.q_eval = build_dqn(alpha, n_actions, input_dims, 64, 64)
+        self.q_next = build_dqn(alpha, n_actions, input_dims, 64, 64)
 
     def remember(self, state, action, reward, new_state, done):
         self.memory.store_transition(state, action, reward, new_state, done)
@@ -117,17 +116,17 @@ class Agent(object):
 
         _ = self.q_eval.fit(state, q_target, verbose=0)
 
-        # self.epsilon = self.epsilon-self.epsilon_dec if self.epsilon > self.epsilon_min else self.epsilon_min
         self.learn_step += 1
 
     def update_epsilon(self):
-        self.epsilon = self.epsilon - self.epsilon_dec if self.epsilon > self.epsilon_min else self.epsilon_min
+        self.epsilon = self.epsilon - self.epsilon_dec \
+            if self.epsilon - self.epsilon_dec > self.epsilon_min else self.epsilon_min
 
-    def save_model(self):
-        self.q_eval.save(self.model_file)
+    def save_model(self, model_file):
+        self.q_eval.save(model_file)
 
-    def load_model(self):
-        self.q_eval = load_model(self.model_file)
+    def load_model(self, model_file):
+        self.q_eval = load_model(model_file)
 
 
 

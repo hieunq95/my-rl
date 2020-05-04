@@ -34,6 +34,9 @@ parameters = {
     'cross_verify_latency': 0.05,
     'block_prop_latency': 0.01,
     'lambda': 4,
+    'training_latency_scale': 0.5,
+    'blk_latency_scale': 0.2,
+    'penalty_scale': 1,
 }
 
 
@@ -54,7 +57,8 @@ class BlockFLEnv(gym.Env):
         high_box = np.array([self.f_max, self.c_max, self.m_max]).repeat(self.nb_devices)[:2*self.nb_devices+1]
         self.observation_space = Box(low=low_box, high=high_box, dtype=np.int32)
         self.state = self.observation_space.sample()
-        self.accumulate_data = np.zeros(nb_devices)
+        self.accumulate_data = np.zeros(self.nb_devices)
+        self.penalties = 0
 
         self.logger = {
             'episode_reward': [],
@@ -66,31 +70,37 @@ class BlockFLEnv(gym.Env):
             'payment': [],
             'cumulative_data': np.zeros(self.nb_devices),
             'actions': [],
-            'states': []
+            'states': [],
+            'data_required': [],
+            'energy_required': [],
+            'latency_required': [],
+            'payment_required': [],
         }
 
-        self.seed(123)
+        self.seed()
 
-    def get_penalties(self, data, energy, scale):
-        penalties = 0
-        for d in data:
-            if d == 0:
-                penalties += 1
-        for e in energy:
-            if e == 0:
-                penalties += 1
-        return penalties * scale
+    def get_penalties(self, scale):
+
+        return self.penalties * scale
 
     def check_action(self, action):
-        state = self.state
+        self.penalties = 0
+        state = np.copy(self.state)
         capacity_array = np.copy(state[self.nb_devices:2*self.nb_devices])
         data_action_array = np.copy(action[0:self.nb_devices])
         energy_action_array = np.copy(action[self.nb_devices:2*self.nb_devices])
         mining_rate_array = np.full(self.nb_devices, parameters['mining_rate_zero'] + action[-1], dtype=int)
+        cpu_cycles = self.get_cpu_cycles(energy_action_array, data_action_array)
 
         for i in range(len(energy_action_array)):
             if energy_action_array[i] > capacity_array[i]:
-                energy_action_array[i] = 0
+                energy_action_array[i] = capacity_array[i]
+
+        for j in range(len(cpu_cycles)):
+            if cpu_cycles[j] == 0:
+                data_action_array[j] = 0
+                energy_action_array[j] = 0
+                self.penalties += 1
 
         corrected_action = np.array([data_action_array, energy_action_array,
                                      mining_rate_array]).flatten()[:2*self.nb_devices+1]
@@ -101,14 +111,17 @@ class BlockFLEnv(gym.Env):
         cpu_cycles_max = parameters['sigma'] * self.state[:self.nb_devices]
         for i in range(len(data)):
             if data[i] != 0 and energy[i] != 0:
-                cpu_cycles[i] = min(np.sqrt(parameters['delta'] * energy[i]
-                                            / (parameters['tau'] * parameters['nu'] * data[i])), cpu_cycles_max[i])
+                cpu_cycles[i] = np.sqrt(parameters['delta'] * energy[i]
+                                        / (parameters['tau'] * parameters['nu'] * data[i]))
+                if cpu_cycles[i] > cpu_cycles_max[i]:
+                    cpu_cycles[i] = 0
             else:
                 cpu_cycles[i] = 0
+        # print(cpu_cycles)
         return cpu_cycles
 
     def calculate_latency(self, action):
-        data = np.copy(action[0:self.nb_devices])
+        data = np.copy(action[:self.nb_devices])
         energy = np.copy(action[self.nb_devices:2 * self.nb_devices])
         mining_rate = parameters['mining_rate_zero'] + action[-1]
         cpu_cycles = self.get_cpu_cycles(energy, data)
@@ -117,17 +130,18 @@ class BlockFLEnv(gym.Env):
         latency = parameters['transmission_latency'] \
                     + parameters['cross_verify_latency'] \
                     + parameters['block_prop_latency'] \
-                    + self.nprandom.exponential(1 / (mining_rate - parameters['block_arrival_rate'])) \
-                    + training_latency
+                    + parameters['blk_latency_scale'] * self.nprandom.exponential(1 / (mining_rate - parameters['block_arrival_rate'])) \
+                    + parameters['training_latency_scale'] * training_latency
+
         return latency
 
     def get_reward(self, action):
-        data = np.copy(action[0:self.nb_devices])
+        data = np.copy(action[:self.nb_devices])
         energy = np.copy(action[self.nb_devices:2 * self.nb_devices])
         cumulative_data = np.sum([parameters['data_qualities'][k] * data[k] for k in range(self.nb_devices)])
         payment = parameters['training_price'] * cumulative_data + parameters['blk_price'] / np.log(1 + self.state[-1])
         latency = self.calculate_latency(action)
-        penalties = self.get_penalties(data, action, 0.8)
+        penalties = self.get_penalties(parameters['penalty_scale'])
         reward = parameters['alpha_D'] * cumulative_data / parameters['data_threshold'] \
                  - parameters['alpha_E'] * np.sum(energy) / parameters['energy_threshold'] \
                  - parameters['alpha_L'] * latency / parameters['latency_threshold'] \
@@ -145,14 +159,15 @@ class BlockFLEnv(gym.Env):
         self.logger['payment'].append(payment)
         self.logger['cumulative_data'] = np.add(self.logger['cumulative_data'], data)
 
-        return reward
+        return reward, cumulative_data / parameters['data_threshold'], np.sum(energy) / parameters['energy_threshold'],\
+                    latency / parameters['latency_threshold'], payment / parameters['payment_threshold']
 
     def state_transition(self, state, action):
         capacity_array = np.copy(state[self.nb_devices:2*self.nb_devices])
         energy_array = np.copy(action[self.nb_devices:2*self.nb_devices])
         mining_rate = parameters['mining_rate_zero'] + action[-1]
         charging_array = self.nprandom.poisson(1, size=len(energy_array))
-        cpu_shares_array = self.nprandom.randint(self.f_max+1, size=self.nb_devices)
+        cpu_shares_array = self.nprandom.randint(low=0, high=self.f_max+1, size=self.nb_devices)
         next_capacity_array = np.zeros(len(capacity_array))
         block_queue_state = self.nprandom.geometric(1 - parameters['lambda'] / mining_rate, size=self.nb_devices)
         for i in range(len(next_capacity_array)):
@@ -164,16 +179,21 @@ class BlockFLEnv(gym.Env):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
         corrected_action = self.check_action(action)
         # corrected_action = action
-        data = np.copy(corrected_action[0:self.nb_devices])
+        data = np.copy(corrected_action[:self.nb_devices])
         state = np.copy(self.state)
         next_state = self.state_transition(state, corrected_action)
         reward = self.get_reward(corrected_action)
         self.accumulate_data = np.add(self.accumulate_data, data)
+        # print(self.get_reward(corrected_action)[1:])
 
         self.logger['episode_steps'] += 1
-        self.logger['episode_reward'].append(reward)
+        self.logger['episode_reward'].append(reward[0])
         self.logger['actions'].append(action)
         self.logger['states'].append(state)
+        self.logger['data_required'].append(reward[1])
+        self.logger['energy_required'].append(reward[2])
+        self.logger['latency_required'].append(reward[3])
+        self.logger['payment_required'].append(reward[4])
 
         if np.sum(self.accumulate_data) >= parameters['cumulative_data_threshold']:
             done = True
@@ -182,10 +202,11 @@ class BlockFLEnv(gym.Env):
             done = False
         self.state = next_state
 
-        return next_state, reward, done, {}
+        return next_state, reward[0], done, {}
 
     def reset(self):
         self.accumulate_data = np.zeros(self.nb_devices)
+        self.penalties = 0
         self.logger = {
             'episode_reward': [],
             'episode_steps': 0,
@@ -196,7 +217,11 @@ class BlockFLEnv(gym.Env):
             'payment': [],
             'cumulative_data': np.zeros(self.nb_devices),
             'actions': [],
-            'states': []
+            'states': [],
+            'data_required': [],
+            'energy_required': [],
+            'latency_required': [],
+            'payment_required': [],
         }
         state = self.observation_space.sample()
         return state

@@ -9,14 +9,16 @@ result_1
 nsteps_sarsa_result_1
 q_learning_result_1 nsteps_sarsa_result_cloud.json
 """
-f1 = './results/result_2.json'
+f1 = './results/result_2_cloud.json'
 f2 = './results/nsteps_sarsa_result_1.json'
-f3 = './results/q_learning_result_2.json'
+f3 = './results/block_fl_q_learning/q_learning_result_2.json'
+f4 = './results/block_fl_random/random_agent.json'
 f = f3
 
 evaluated_metric = 'scores'
 window = 10
-metrics = ['reward', 'avg_reward', 'energy', 'latency', 'payment', 'data_1', 'data_2', 'actions', 'states']
+metrics = ['reward', 'avg_reward', 'data_required', 'energy_required', 'latency_required', 'payment_required',
+           'energy', 'latency', 'payment', 'data_1', 'data_2', 'actions', 'states']
 
 
 def plot_learning(file, ewm_window, metric):

@@ -5,6 +5,7 @@ from environment.block_fl import BlockFLEnv, parameters
 
 
 TEST_ID = 2
+file_name = './results/block_fl_q_learning/q_learning_result_{}.json'.format(TEST_ID)
 
 json_data = {
     'epsilon': [],
@@ -16,9 +17,13 @@ json_data = {
     'payment': [],
     'data_1': [],
     'data_2': [],
-    'data_3': [],
+    # 'data_3': [],
     'states': [],
-    'actions': []
+    'actions': [],
+    'data_required': [],
+    'energy_required': [],
+    'latency_required': [],
+    'payment_required': [],
 }
 
 
@@ -71,24 +76,36 @@ def process_action(action, action_limit, nb_devices):
 
 
 if __name__ == '__main__':
-    nb_devices = 3
+    nb_devices = 2
     nb_games = 4000
     window = 10
+
+    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=8)
 
     parameters['cumulative_data_threshold'] = 1000
     parameters['alpha_D'] = 10
     parameters['alpha_E'] = 3
     parameters['alpha_L'] = 1
     parameters['alpha_I'] = 2
-
-    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10)
-
+    parameters['training_latency_scale'] = 0.8
+    parameters['blk_latency_scale'] = 0.2
+    parameters['sigma'] = 1.2 * 10**9
+    parameters['penalty_scale'] = 0.5
+    parameters['energy_threshold'] = env.nb_devices * (env.e_max - 1)
+    parameters['data_threshold'] = env.nb_devices * (env.d_max - 1)
+    parameters['payment_threshold'] = parameters['training_price'] * parameters['data_threshold']\
+                                       + parameters['blk_price'] / np.log(1 + 1)
+    parameters['latency_threshold'] = parameters['transmission_latency'] \
+                    + parameters['cross_verify_latency'] \
+                    + parameters['block_prop_latency'] \
+                    + parameters['blk_latency_scale'] * (env.m_max - 1) \
+                    + parameters['training_latency_scale'] * ((parameters['nu']**1.5) * (parameters['tau']**0.5) / parameters['delta']**0.5) * (env.d_max-1)**1.5
+                    # 10 ~ max(np.random.exponential(1)) \
     nb_actions = env.d_max ** (2*nb_devices + 1)
     nb_states = (env.f_max + 1) ** (2*nb_devices) * env.m_max
 
-    agent = QLearningAgent(nb_states, nb_actions, alpha=0.001, gamma=0.99,
+    agent = QLearningAgent(nb_states, nb_actions, alpha=0.01, gamma=0.99,
                            epsilon=0.9, epsilon_min=0.1, epsilon_decay=4e-4)
-
 
     print(env.action_space, env.observation_space.sample(), env.observation_space.low, env.observation_space.high)
     print(agent.q_table.shape)
@@ -103,9 +120,8 @@ if __name__ == '__main__':
 
         while not done:
             s = to_scalar_state(state, env.f_max+1)
-            random_action = env.action_space.sample()
             action = agent.choose_action(s)
-            a = process_action(action, env.d_max, nb_devices)
+            a = process_action(action, env.d_max, env.nb_devices)
             next_state, reward, done, _ = env.step(a)
             s_ = to_scalar_state(next_state, env.f_max+1)
             agent.update_q_table(reward, a, s, s_, done)
@@ -129,9 +145,13 @@ if __name__ == '__main__':
             json_data['data_3'].append(env.logger['cumulative_data'][2])
         json_data['states'].append(np.mean([to_scalar_state(s, 3) for s in env.logger['states']]))
         json_data['actions'].append(np.mean([to_scalar_action(a, 3) for a in env.logger['actions']]))
+        json_data['data_required'].append(np.mean(env.logger['data_required']))
+        json_data['energy_required'].append(np.mean(env.logger['energy_required']))
+        json_data['latency_required'].append(np.mean(env.logger['latency_required']))
+        json_data['payment_required'].append(np.mean(env.logger['payment_required']))
 
         if i >= window and i % window == 0:
-            with open('./results/q_learning_result_{}.json'.format(TEST_ID), 'w') as outfile:
+            with open(file_name, 'w') as outfile:
                 json.dump(json_data, outfile)
             # print(json_data['actions'][i])
 
