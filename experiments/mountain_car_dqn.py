@@ -2,7 +2,7 @@ import gym
 import json
 from dqn.dqn_agent import Agent
 
-TEST_ID = 2
+TEST_ID = 1
 file_name = './results/mountain_car_dqn/mountain_car_dqn_{}.json'.format(TEST_ID)
 
 logger = {
@@ -14,15 +14,16 @@ logger = {
 
 
 if __name__ == '__main__':
-    nb_games = 600
+    nb_games = 1000
     env = gym.make('MountainCar-v0')
+    env._max_episode_steps = 1000
     input_dims = env.observation_space.shape[0]
     nb_actions = env.action_space.n
     scores = []
-    load_model = True
+    load_model = False
     h5_file = './results/mountain_car_dqn/mountain_car_model.h5'
 
-    agent = Agent(alpha=0.001, gamma=0.99, n_actions=nb_actions, epsilon=0.9, epsilon_end=0.1, epsilon_dec=0.08,
+    agent = Agent(alpha=0.001, gamma=0.99, n_actions=nb_actions, epsilon=0.1, epsilon_end=0.1, epsilon_dec=0.08,
                   batch_size=64, input_dims=input_dims, mem_size=500000, replace=1000)
     print(env.observation_space.shape[0], env.action_space, env.observation_space,
           env.observation_space.low, env.observation_space.high)

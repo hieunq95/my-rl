@@ -13,7 +13,10 @@ f1 = './results/result_2_cloud.json'
 f2 = './results/nsteps_sarsa_result_1.json'
 f3 = './results/block_fl_q_learning/q_learning_result_2.json'
 f4 = './results/block_fl_random/random_agent.json'
-f = f3
+f5 = './results/mountain_car_semi_gradient_sarsa/result.json'
+f6 = './results/mountain_car_q_learning/result_1.json'
+f7 = './results/mountain_car_dqn/mountain_car_dqn_1.json'
+f = f5
 
 evaluated_metric = 'scores'
 window = 10
@@ -25,7 +28,7 @@ def plot_learning(file, ewm_window, metric):
     x_array, y_array, epsilons = [], [], []
     with open(file) as json_file:
         data = json.load(json_file)
-        ewm_data = pandas.read_json(f)[metric].ewm(span=ewm_window, adjust=False).mean()
+        ewm_data = pandas.read_json(file)[metric].ewm(span=ewm_window, adjust=False).mean()
         i = 0
         for p in data[metric]:
             x_array.append(i)
@@ -38,6 +41,6 @@ def plot_learning(file, ewm_window, metric):
 
 
 if __name__ == '__main__':
-    for i in range(len(metrics)):
-        plot_learning(f, window, metrics[i])
-    # plot_learning(f, window, evaluated_metric)
+    # for i in range(len(metrics)):
+    #     plot_learning(f, window, metrics[i])
+    plot_learning(f, window, evaluated_metric)

@@ -13,7 +13,7 @@ logger = {
     'episode': [],
 }
 
-file_name = './results/mountain_car_q_learning_{}.json'.format(TEST_ID)
+file_name = './results/mountain_car_q_learning/result_{}.json'.format(TEST_ID)
 window = 100
 
 
@@ -32,7 +32,7 @@ if __name__ == '__main__':
     state_space = discrete_space**2
 
     agent = QLearningAgent(nb_states=state_space, nb_actions=action_space, alpha=0.1, gamma=0.99,
-                           epsilon=0.1, epsilon_min=0.01, epsilon_decay=1e-3)
+                           epsilon=0.1, epsilon_min=0.1, epsilon_decay=1e-3)
     position0 = env.observation_space.low[0]
     velocity0 = env.observation_space.low[1]
     window_p = (env.observation_space.high[0] - env.observation_space.low[0]) / discrete_space
