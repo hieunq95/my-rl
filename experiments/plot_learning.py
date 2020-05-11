@@ -16,7 +16,8 @@ f4 = './results/block_fl_random/random_agent.json'
 f5 = './results/mountain_car_semi_gradient_sarsa/result.json'
 f6 = './results/mountain_car_q_learning/result_1.json'
 f7 = './results/mountain_car_dqn/mountain_car_dqn_1.json'
-f = f5
+f8 = './results/policy_gradient/reinforce.json'
+f = f8
 
 evaluated_metric = 'scores'
 window = 10
