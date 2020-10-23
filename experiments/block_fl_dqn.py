@@ -3,7 +3,6 @@ from dqn.dqn_agent import Agent
 import numpy as np
 import json
 
-TEST_ID = 3
 
 json_data = {
     'epsilon': [],
@@ -70,18 +69,19 @@ def process_action(action, action_limit, nb_devices):
 
 
 if __name__ == '__main__':
+    TEST_ID = 4
     env = BlockFLEnv(3, 4, 4, 4, 3, 3, 10)
     nb_actions = env.d_max ** (2 * env.nb_devices + 1)
-    n_games = 2000
-    agent = Agent(gamma=0.99, epsilon=0.1, epsilon_end=0.1, alpha=0.001, input_dims=env.observation_space.shape[0],
-                  epsilon_dec=1e-2, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
+    nb_episodes = 200
+    agent = Agent(gamma=0.99, epsilon=1.0, epsilon_end=0.1, alpha=0.001, input_dims=env.observation_space.shape[0],
+                  epsilon_dec=0.9/50, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
 
     # agent.load_model()
     scores = []
-    print(env.action_space, env.observation_space)
+    print(env.action_space, env.observation_space, nb_actions)
     print(parameters)
     print('\n ****************** DQN test: {} begins ******************* \n'.format(TEST_ID))
-    for i in range(n_games):
+    for i in range(nb_episodes):
         done = False
         score = 0
         step = 0

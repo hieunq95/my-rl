@@ -5,7 +5,7 @@ from environment.block_fl import BlockFLEnv, parameters
 
 
 TEST_ID = 2
-file_name = './results/block_fl_q_learning/q_learning_result_{}.json'.format(TEST_ID)
+file_name = './results/block_fl/q_learning_result_{}.json'.format(TEST_ID)
 
 json_data = {
     'epsilon': [],
@@ -17,7 +17,7 @@ json_data = {
     'payment': [],
     'data_1': [],
     'data_2': [],
-    # 'data_3': [],
+    'data_3': [],
     'states': [],
     'actions': [],
     'data_required': [],
@@ -76,11 +76,11 @@ def process_action(action, action_limit, nb_devices):
 
 
 if __name__ == '__main__':
-    nb_devices = 2
-    nb_games = 4000
+    nb_devices = 3
+    nb_games = 200
     window = 10
 
-    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=8)
+    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10)
 
     parameters['cumulative_data_threshold'] = 1000
     parameters['alpha_D'] = 10
@@ -105,7 +105,7 @@ if __name__ == '__main__':
     nb_states = (env.f_max + 1) ** (2*nb_devices) * env.m_max
 
     agent = QLearningAgent(nb_states, nb_actions, alpha=0.01, gamma=0.99,
-                           epsilon=0.9, epsilon_min=0.1, epsilon_decay=4e-4)
+                           epsilon=1.0, epsilon_min=0.1, epsilon_decay=0.9/50)
 
     print(env.action_space, env.observation_space.sample(), env.observation_space.low, env.observation_space.high)
     print(agent.q_table.shape)
