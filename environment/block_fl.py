@@ -21,10 +21,10 @@ parameters = {
     'blk_price': 0.8,
     'data_qualities': [1, 1, 1],  # var_1
     'alpha_D': 10,
-    'alpha_E': 3,
+    'alpha_E': 1,
     'alpha_L': 1,
-    'alpha_I': 2,
-    'mining_rate_zero': 5,
+    'alpha_I': 1,
+    'mining_rate_zero': 5,  # 5 blocks/hour
     'block_arrival_rate': 4,
     'energy_threshold': 9,
     'data_threshold': 9,
@@ -34,10 +34,18 @@ parameters = {
     'cross_verify_latency': 0.05,
     'block_prop_latency': 0.01,
     'lambda': 4,
-    'training_latency_scale': 0.5,
-    'blk_latency_scale': 0.2,
+    'training_latency_scale': 1,
+    'blk_latency_scale': 60,  # minutes
     'penalty_scale': 1,
 }
+
+queue_latency_max = np.max(np.random.exponential(1 / (0 + parameters['mining_rate_zero']
+                                                      - parameters['block_arrival_rate']), 10000))
+parameters['latency_threshold'] = 51.9612 + parameters['transmission_latency'] \
+                                  + parameters['blk_latency_scale'] * queue_latency_max + \
+                                  parameters['block_prop_latency'] + parameters['cross_verify_latency']
+
+print('latency_threshold: {}'.format(parameters['latency_threshold']))
 
 
 class BlockFLEnv(gym.Env):
@@ -127,12 +135,12 @@ class BlockFLEnv(gym.Env):
         cpu_cycles = self.get_cpu_cycles(energy, data)
         training_latency = np.max([parameters['nu'] * data[k] / cpu_cycles[k] if cpu_cycles[k] != 0 else 0
                                    for k in range(len(data))])
-        latency = parameters['transmission_latency'] \
-                    + parameters['cross_verify_latency'] \
-                    + parameters['block_prop_latency'] \
-                    + parameters['blk_latency_scale'] * self.nprandom.exponential(1 / (mining_rate - parameters['block_arrival_rate'])) \
-                    + parameters['training_latency_scale'] * training_latency
-
+        block_queue_latency = parameters['cross_verify_latency'] + parameters['block_prop_latency'] + \
+                              parameters['blk_latency_scale'] * self.nprandom.exponential(1 / (mining_rate - parameters['block_arrival_rate']))
+        latency = parameters['transmission_latency'] + block_queue_latency +\
+                  parameters['training_latency_scale'] * training_latency
+        # print('L_tr: {}, L_tx: {}, L_blk: {}'.format(training_latency, parameters['transmission_latency'],
+        #                                              block_queue_latency))
         return latency
 
     def get_reward(self, action):

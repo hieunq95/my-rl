@@ -56,7 +56,7 @@ if __name__ == '__main__':
                'energy', 'latency', 'payment', 'data_1', 'data_2', 'actions', 'states']
     # for i in range(len(metrics)):
     #     plot_learning(f, window, metrics[i])
-    ID = 4
-    evaluated_metric = 'energy'
+    ID = 6
+    evaluated_metric = 'latency'
     file = './results/result_{}.json'.format(ID)
     plot_learning(file, window, evaluated_metric)

@@ -69,7 +69,7 @@ def process_action(action, action_limit, nb_devices):
 
 
 if __name__ == '__main__':
-    TEST_ID = 4
+    TEST_ID = 6
     env = BlockFLEnv(3, 4, 4, 4, 3, 3, 10)
     nb_actions = env.d_max ** (2 * env.nb_devices + 1)
     nb_episodes = 200
