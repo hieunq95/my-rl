@@ -11,7 +11,7 @@ from gym.spaces.multi_discrete import MultiDiscrete
 from gym.spaces.box import Box
 
 
-parameters = {
+local_parameters = {
     'cumulative_data_threshold': 1000,
     'tau': 10**(-28),
     'nu': 10**10,
@@ -28,7 +28,7 @@ parameters = {
     'block_arrival_rate': 4,
     'energy_threshold': 9,
     'data_threshold': 9,
-    'payment_threshold': 2.955,  # var_1
+    'payment_threshold': 4.458,  # var_1
     'latency_threshold': 54,
     'transmission_latency': 0.0193,  # seconds
     'cross_verify_latency': 0.05,
@@ -39,18 +39,20 @@ parameters = {
     'penalty_scale': 1,
 }
 
-queue_latency_max = np.max(np.random.exponential(1 / (0 + parameters['mining_rate_zero']
-                                                      - parameters['block_arrival_rate']), 10000))
-parameters['latency_threshold'] = 51.9612 + parameters['transmission_latency'] \
-                                  + parameters['blk_latency_scale'] * queue_latency_max + \
-                                  parameters['block_prop_latency'] + parameters['cross_verify_latency']
+queue_latency_max = np.max(np.random.exponential(1 / (0 + local_parameters['mining_rate_zero']
+                                                      - local_parameters['block_arrival_rate']), 1000000))
+local_parameters['latency_threshold'] = 51.9612 + local_parameters['transmission_latency'] \
+                                  + local_parameters['blk_latency_scale'] * queue_latency_max + \
+                                  local_parameters['block_prop_latency'] + local_parameters['cross_verify_latency']
 
-print('latency_threshold: {}'.format(parameters['latency_threshold']))
+print('latency_threshold: {}'.format(local_parameters['latency_threshold']))
 
 
 class BlockFLEnv(gym.Env):
 
-    def __init__(self, nb_devices=3, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10):
+    def __init__(self, nb_devices=3, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10, parameters=None):
+        self.parameters = parameters
+        self.parameters['latency_threshold'] = local_parameters['latency_threshold']
         self.nb_devices = nb_devices
         self.d_max = d_max
         self.e_max = e_max
@@ -97,12 +99,13 @@ class BlockFLEnv(gym.Env):
         capacity_array = np.copy(state[self.nb_devices:2*self.nb_devices])
         data_action_array = np.copy(action[0:self.nb_devices])
         energy_action_array = np.copy(action[self.nb_devices:2*self.nb_devices])
-        mining_rate_array = np.full(self.nb_devices, parameters['mining_rate_zero'] + action[-1], dtype=int)
+        mining_rate_array = np.full(self.nb_devices, self.parameters['mining_rate_zero'] + action[-1], dtype=int)
         cpu_cycles = self.get_cpu_cycles(energy_action_array, data_action_array)
 
         for i in range(len(energy_action_array)):
             if energy_action_array[i] > capacity_array[i]:
                 energy_action_array[i] = capacity_array[i]
+                self.penalties += 1
 
         for j in range(len(cpu_cycles)):
             if cpu_cycles[j] == 0:
@@ -116,11 +119,11 @@ class BlockFLEnv(gym.Env):
 
     def get_cpu_cycles(self, energy, data):
         cpu_cycles = np.zeros(len(energy))
-        cpu_cycles_max = parameters['sigma'] * self.state[:self.nb_devices]
+        cpu_cycles_max = self.parameters['sigma'] * self.state[:self.nb_devices]
         for i in range(len(data)):
             if data[i] != 0 and energy[i] != 0:
-                cpu_cycles[i] = np.sqrt(parameters['delta'] * energy[i]
-                                        / (parameters['tau'] * parameters['nu'] * data[i]))
+                cpu_cycles[i] = np.sqrt(self.parameters['delta'] * energy[i]
+                                        / (self.parameters['tau'] * self.parameters['nu'] * data[i]))
                 if cpu_cycles[i] > cpu_cycles_max[i]:
                     cpu_cycles[i] = 0
             else:
@@ -131,14 +134,14 @@ class BlockFLEnv(gym.Env):
     def calculate_latency(self, action):
         data = np.copy(action[:self.nb_devices])
         energy = np.copy(action[self.nb_devices:2 * self.nb_devices])
-        mining_rate = parameters['mining_rate_zero'] + action[-1]
+        mining_rate = self.parameters['mining_rate_zero'] + action[-1]
         cpu_cycles = self.get_cpu_cycles(energy, data)
-        training_latency = np.max([parameters['nu'] * data[k] / cpu_cycles[k] if cpu_cycles[k] != 0 else 0
+        training_latency = np.max([self.parameters['nu'] * data[k] / cpu_cycles[k] if cpu_cycles[k] != 0 else 0
                                    for k in range(len(data))])
-        block_queue_latency = parameters['cross_verify_latency'] + parameters['block_prop_latency'] + \
-                              parameters['blk_latency_scale'] * self.nprandom.exponential(1 / (mining_rate - parameters['block_arrival_rate']))
-        latency = parameters['transmission_latency'] + block_queue_latency +\
-                  parameters['training_latency_scale'] * training_latency
+        block_queue_latency = self.parameters['cross_verify_latency'] + self.parameters['block_prop_latency'] + \
+                              self.parameters['blk_latency_scale'] * self.nprandom.exponential(1 / (mining_rate - self.parameters['block_arrival_rate']))
+        latency = self.parameters['transmission_latency'] + block_queue_latency +\
+                  self.parameters['training_latency_scale'] * training_latency
         # print('L_tr: {}, L_tx: {}, L_blk: {}'.format(training_latency, parameters['transmission_latency'],
         #                                              block_queue_latency))
         return latency
@@ -146,38 +149,38 @@ class BlockFLEnv(gym.Env):
     def get_reward(self, action):
         data = np.copy(action[:self.nb_devices])
         energy = np.copy(action[self.nb_devices:2 * self.nb_devices])
-        cumulative_data = np.sum([parameters['data_qualities'][k] * data[k] for k in range(self.nb_devices)])
-        payment = parameters['training_price'] * cumulative_data + parameters['blk_price'] / np.log(1 + self.state[-1])
+        cumulative_data = np.sum([self.parameters['data_qualities'][k] * data[k] for k in range(self.nb_devices)])
+        payment = self.parameters['training_price'] * cumulative_data + self.parameters['blk_price'] / np.log(1 + self.state[-1])
         latency = self.calculate_latency(action)
-        penalties = self.get_penalties(parameters['penalty_scale'])
-        reward = parameters['alpha_D'] * cumulative_data / parameters['data_threshold'] \
-                 - parameters['alpha_E'] * np.sum(energy) / parameters['energy_threshold'] \
-                 - parameters['alpha_L'] * latency / parameters['latency_threshold'] \
-                 - parameters['alpha_I'] * payment / parameters['payment_threshold'] \
+        penalties = self.get_penalties(self.parameters['penalty_scale'])
+        reward = self.parameters['alpha_D'] * cumulative_data / self.parameters['data_threshold'] \
+                 - self.parameters['alpha_E'] * np.sum(energy) / self.parameters['energy_threshold'] \
+                 - self.parameters['alpha_L'] * latency / self.parameters['latency_threshold'] \
+                 - self.parameters['alpha_I'] * payment / self.parameters['payment_threshold'] \
                  - penalties
 
-        if latency / parameters['latency_threshold'] > 1:
-            print('data: {}, energy: {}, latency: {}, payment: {}'.format(cumulative_data / parameters['data_threshold'],
-                                                                        np.sum(energy) / parameters['energy_threshold'],
-                                                                        latency / parameters['latency_threshold'],
-                                                                         payment / parameters['payment_threshold']))
+        if payment / self.parameters['payment_threshold'] > 1:
+            print('data: {}, energy: {}, latency: {}, payment: {}'.format(cumulative_data / self.parameters['data_threshold'],
+                                                                        np.sum(energy) / self.parameters['energy_threshold'],
+                                                                        latency / self.parameters['latency_threshold'],
+                                                                         payment / self.parameters['payment_threshold']))
 
         self.logger['latency'].append(latency)
         self.logger['energy'].append(np.sum(energy))
         self.logger['payment'].append(payment)
         self.logger['cumulative_data'] = np.add(self.logger['cumulative_data'], data)
 
-        return reward, cumulative_data / parameters['data_threshold'], np.sum(energy) / parameters['energy_threshold'],\
-                    latency / parameters['latency_threshold'], payment / parameters['payment_threshold']
+        return reward, cumulative_data / self.parameters['data_threshold'], np.sum(energy) / self.parameters['energy_threshold'],\
+                    latency / self.parameters['latency_threshold'], payment / self.parameters['payment_threshold']
 
     def state_transition(self, state, action):
         capacity_array = np.copy(state[self.nb_devices:2*self.nb_devices])
         energy_array = np.copy(action[self.nb_devices:2*self.nb_devices])
-        mining_rate = parameters['mining_rate_zero'] + action[-1]
+        mining_rate = self.parameters['mining_rate_zero'] + action[-1]
         charging_array = self.nprandom.poisson(1, size=len(energy_array))
         cpu_shares_array = self.nprandom.randint(low=0, high=self.f_max+1, size=self.nb_devices)
         next_capacity_array = np.zeros(len(capacity_array))
-        block_queue_state = self.nprandom.geometric(1 - parameters['lambda'] / mining_rate, size=self.nb_devices)
+        block_queue_state = self.nprandom.geometric(1 - self.parameters['lambda'] / mining_rate, size=self.nb_devices)
         for i in range(len(next_capacity_array)):
             next_capacity_array[i] = min(capacity_array[i] - energy_array[i] + charging_array[i], self.c_max)
         next_state = np.array([cpu_shares_array, next_capacity_array, block_queue_state], dtype=np.int32).flatten()
@@ -203,7 +206,7 @@ class BlockFLEnv(gym.Env):
         self.logger['latency_required'].append(reward[3])
         self.logger['payment_required'].append(reward[4])
 
-        if np.sum(self.accumulate_data) >= parameters['cumulative_data_threshold']:
+        if np.sum(self.accumulate_data) >= self.parameters['cumulative_data_threshold']:
             done = True
             self.logger['average_reward'] = np.mean(self.logger['episode_reward'])
         else:

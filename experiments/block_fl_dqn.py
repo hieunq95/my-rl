@@ -1,4 +1,4 @@
-from environment.block_fl import BlockFLEnv, parameters
+from environment.block_fl import BlockFLEnv
 from dqn.dqn_agent import Agent
 import numpy as np
 import json
@@ -68,19 +68,16 @@ def process_action(action, action_limit, nb_devices):
     return processed_action
 
 
-if __name__ == '__main__':
-    TEST_ID = 6
-    env = BlockFLEnv(3, 4, 4, 4, 3, 3, 10)
+def train(test_id=1, nb_episodes=200, eps=1.0, eps_end=0.1, parameters=None):
+    env = BlockFLEnv(3, 4, 4, 4, 3, 3, 10, parameters)
     nb_actions = env.d_max ** (2 * env.nb_devices + 1)
-    nb_episodes = 200
-    agent = Agent(gamma=0.99, epsilon=1.0, epsilon_end=0.1, alpha=0.001, input_dims=env.observation_space.shape[0],
-                  epsilon_dec=0.9/50, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
-
-    # agent.load_model()
+    nb_episodes = nb_episodes
+    agent = Agent(gamma=0.99, epsilon=eps, epsilon_end=eps_end, alpha=0.001, input_dims=env.observation_space.shape[0],
+                  epsilon_dec=(eps - eps_end) / 50, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
     scores = []
     print(env.action_space, env.observation_space, nb_actions)
     print(parameters)
-    print('\n ****************** DQN test: {} begins ******************* \n'.format(TEST_ID))
+    print('\n ****************** DQN test: {} begins ******************* \n'.format(test_id))
     for i in range(nb_episodes):
         done = False
         score = 0
@@ -100,11 +97,12 @@ if __name__ == '__main__':
         agent.update_epsilon()
         scores.append(score)
 
-        avg_score = np.mean(scores)
-        print('episode: {}, epsilon: {}, steps: {}, score: {}, average_score: {}'
-              .format(i+1, agent.epsilon, env.logger['episode_steps'],
-                      np.sum(env.logger['episode_reward']), env.logger['average_reward']))
-        json_data['episode'].append(i+1)
+        print('episode: %4d, epsilon: %5.2f, steps: %4d, reward: %7.2f, average_reward: %5.2f,'
+              ' energy: %5.2f, latency: %5.2f, payment: %5.2f'
+              %(i + 1, agent.epsilon, env.logger['episode_steps'],
+                      np.sum(env.logger['episode_reward']), env.logger['average_reward'],
+                np.mean(env.logger['energy']), np.mean(env.logger['latency']), np.mean(env.logger['payment'])))
+        json_data['episode'].append(i + 1)
         json_data['reward'].append(np.sum(env.logger['episode_reward']))
         json_data['avg_reward'].append(env.logger['average_reward'])
         json_data['energy'].append(np.mean(env.logger['energy']))
@@ -117,9 +115,40 @@ if __name__ == '__main__':
         json_data['states'].append(np.mean([to_scalar_state(s) for s in env.logger['states']]))
         json_data['actions'].append(np.mean([to_scalar_action(a, env.d_max) for a in env.logger['actions']]))
 
-        with open('./results/result_{}.json'.format(TEST_ID), 'w') as outfile:
+        with open('./results/block_fl/result_{}.json'.format(test_id), 'w') as outfile:
             json.dump(json_data, outfile)
     print('****************** DQN test: {} ends ******************* \n'.format(TEST_ID))
-        # if i % 10 == 0 and i > 0:
-        #     agent.save_model()
-    filename = 'dqn_lunarlander.h5'
+    model_path = './results/block_fl/block_fl_dqn.h5'
+    print('Save model to: {}'.format(model_path))
+    agent.save_model(model_path)
+
+
+if __name__ == '__main__':
+    parameters = {
+        'cumulative_data_threshold': 1000,
+        'tau': 10 ** (-28),
+        'nu': 10 ** 10,
+        'delta': 1,
+        'sigma': 0.6 * 10 ** 9,
+        'training_price': 0.2,
+        'blk_price': 0.8,
+        'data_qualities': [1, 1, 1],  # var_1
+        'alpha_D': 6,
+        'alpha_E': 1,
+        'alpha_L': 3,
+        'alpha_I': 2,
+        'mining_rate_zero': 5,  # 5 blocks/hour
+        'block_arrival_rate': 4,
+        'energy_threshold': 9,
+        'data_threshold': 9,
+        'payment_threshold': 2.955,  # var_1 - 3 devices, 0.2 * D + 0.8 / log(1+m) = 2.955
+        'latency_threshold': 540,
+        'transmission_latency': 0.0193,  # seconds
+        'cross_verify_latency': 0.05,
+        'block_prop_latency': 0.01,
+        'lambda': 4,
+        'training_latency_scale': 1,
+        'blk_latency_scale': 60,  # minutes
+        'penalty_scale': 1,
+    }
+    train(test_id=6, nb_episodes=100, eps=1.0, eps_end=0.1, parameters=parameters)
