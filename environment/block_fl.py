@@ -66,7 +66,7 @@ class BlockFLEnv(gym.Env):
         low_box = np.array([0, 0, 1]).repeat(self.nb_devices)[:2*self.nb_devices+1]
         high_box = np.array([self.f_max, self.c_max, self.m_max]).repeat(self.nb_devices)[:2*self.nb_devices+1]
         self.observation_space = Box(low=low_box, high=high_box, dtype=np.int32)
-        self.state = self.observation_space.sample()
+        # self.state = self.observation_space.sample()
         self.accumulate_data = np.zeros(self.nb_devices)
         self.penalties = 0
 
@@ -86,8 +86,8 @@ class BlockFLEnv(gym.Env):
             'latency_required': [],
             'payment_required': [],
         }
-
-        self.seed()
+        self.seed(123)
+        self.reset()
 
     def get_penalties(self, scale):
 
@@ -104,14 +104,15 @@ class BlockFLEnv(gym.Env):
 
         for i in range(len(energy_action_array)):
             if energy_action_array[i] > capacity_array[i]:
-                energy_action_array[i] = capacity_array[i]
-                self.penalties += 1
+                # energy_action_array[i] = capacity_array[i]
+                energy_action_array[i] = 0
+                self.penalties += 0
 
         for j in range(len(cpu_cycles)):
             if cpu_cycles[j] == 0:
                 data_action_array[j] = 0
                 energy_action_array[j] = 0
-                self.penalties += 1
+                self.penalties += 0
 
         corrected_action = np.array([data_action_array, energy_action_array,
                                      mining_rate_array]).flatten()[:2*self.nb_devices+1]
@@ -184,7 +185,8 @@ class BlockFLEnv(gym.Env):
         for i in range(len(next_capacity_array)):
             next_capacity_array[i] = min(capacity_array[i] - energy_array[i] + charging_array[i], self.c_max)
         next_state = np.array([cpu_shares_array, next_capacity_array, block_queue_state], dtype=np.int32).flatten()
-        return next_state[:1+2*self.nb_devices]
+        self.state = next_state[:1+2*self.nb_devices]
+        return self.state
 
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid" % (action, type(action))
@@ -211,7 +213,7 @@ class BlockFLEnv(gym.Env):
             self.logger['average_reward'] = np.mean(self.logger['episode_reward'])
         else:
             done = False
-        self.state = next_state
+        # self.state = next_state
 
         return next_state, reward[0], done, {}
 
@@ -234,7 +236,13 @@ class BlockFLEnv(gym.Env):
             'latency_required': [],
             'payment_required': [],
         }
-        state = self.observation_space.sample()
+        cpu_shares_init = self.nprandom.randint(self.f_max + 1, size=self.nb_devices)
+        capacity_init = self.nprandom.randint(self.c_max + 1, size=self.nb_devices)
+        mempool_init = np.full(self.nb_devices, 1)
+        state = np.array([cpu_shares_init, capacity_init, mempool_init]).flatten()
+        state = state[:2 * self.nb_devices + 1]
+        # state = self.observation_space.sample()
+        self.state = state
         return state
 
     def seed(self, seed=None):

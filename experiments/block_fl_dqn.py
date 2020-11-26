@@ -68,12 +68,12 @@ def process_action(action, action_limit, nb_devices):
     return processed_action
 
 
-def train(test_id=1, nb_episodes=200, eps=1.0, eps_end=0.1, parameters=None):
+def train(test_id=1, nb_episodes=2000, eps=1.0, eps_end=0.1, eps_decay=1500, parameters=None):
     env = BlockFLEnv(3, 4, 4, 4, 3, 3, 10, parameters)
     nb_actions = env.d_max ** (2 * env.nb_devices + 1)
     nb_episodes = nb_episodes
     agent = Agent(gamma=0.99, epsilon=eps, epsilon_end=eps_end, alpha=0.001, input_dims=env.observation_space.shape[0],
-                  epsilon_dec=(eps - eps_end) / 50, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
+                  epsilon_dec=(eps - eps_end)/eps_decay, n_actions=nb_actions, mem_size=50000, batch_size=64, replace=1000)
     scores = []
     print(env.action_space, env.observation_space, nb_actions)
     print(parameters)
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         'training_price': 0.2,
         'blk_price': 0.8,
         'data_qualities': [1, 1, 1],  # var_1
-        'alpha_D': 6,
+        'alpha_D': 10,
         'alpha_E': 1,
         'alpha_L': 3,
         'alpha_I': 2,
@@ -151,4 +151,4 @@ if __name__ == '__main__':
         'blk_latency_scale': 60,  # minutes
         'penalty_scale': 1,
     }
-    train(test_id=6, nb_episodes=100, eps=1.0, eps_end=0.1, parameters=parameters)
+    train(test_id=1, nb_episodes=2000, eps=1.0, eps_end=0.1, eps_decay=1500, parameters=parameters)

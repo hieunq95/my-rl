@@ -1,11 +1,7 @@
 import numpy as np
 import json
 from TD_learning.q_learning import QLearningAgent
-from environment.block_fl import BlockFLEnv, parameters
-
-
-TEST_ID = 2
-file_name = './results/block_fl/q_learning_result_{}.json'.format(TEST_ID)
+from environment.block_fl import BlockFLEnv
 
 json_data = {
     'epsilon': [],
@@ -75,55 +71,32 @@ def process_action(action, action_limit, nb_devices):
     return processed_action
 
 
-if __name__ == '__main__':
+def train(test_id=1, nb_episodes=200, eps=1.0, eps_end=0.1, eps_decay=100, parameters=None):
     nb_devices = 3
-    nb_games = 200
     window = 10
 
-    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10)
-
-    parameters['cumulative_data_threshold'] = 1000
-    parameters['alpha_D'] = 10
-    parameters['alpha_E'] = 3
-    parameters['alpha_L'] = 1
-    parameters['alpha_I'] = 2
-    parameters['training_latency_scale'] = 0.8
-    parameters['blk_latency_scale'] = 0.2
-    parameters['sigma'] = 1.2 * 10**9
-    parameters['penalty_scale'] = 0.5
-    parameters['energy_threshold'] = env.nb_devices * (env.e_max - 1)
-    parameters['data_threshold'] = env.nb_devices * (env.d_max - 1)
-    parameters['payment_threshold'] = parameters['training_price'] * parameters['data_threshold']\
-                                       + parameters['blk_price'] / np.log(1 + 1)
-    parameters['latency_threshold'] = parameters['transmission_latency'] \
-                    + parameters['cross_verify_latency'] \
-                    + parameters['block_prop_latency'] \
-                    + parameters['blk_latency_scale'] * (env.m_max - 1) \
-                    + parameters['training_latency_scale'] * ((parameters['nu']**1.5) * (parameters['tau']**0.5) / parameters['delta']**0.5) * (env.d_max-1)**1.5
-                    # 10 ~ max(np.random.exponential(1)) \
-    nb_actions = env.d_max ** (2*nb_devices + 1)
-    nb_states = (env.f_max + 1) ** (2*nb_devices) * env.m_max
-
+    env = BlockFLEnv(nb_devices=nb_devices, d_max=4, e_max=4, u_max=4, f_max=3, c_max=3, m_max=10, parameters=parameters)
+    nb_actions = env.d_max ** (2 * nb_devices + 1)
+    nb_states = (env.f_max + 1) ** (2 * nb_devices) * env.m_max
     agent = QLearningAgent(nb_states, nb_actions, alpha=0.01, gamma=0.99,
-                           epsilon=1.0, epsilon_min=0.1, epsilon_decay=0.9/50)
-
+                           epsilon=eps, epsilon_min=eps_end, epsilon_decay=(eps - eps_end) / eps_decay)
     print(env.action_space, env.observation_space.sample(), env.observation_space.low, env.observation_space.high)
     print(agent.q_table.shape)
     print(parameters)
-    print('****************** Q-learning test: {} begins ******************* \n'.format(TEST_ID))
+    print('****************** Q-learning test: {} begins ******************* \n'.format(test_id))
 
-    for i in range(nb_games):
+    for i in range(nb_episodes):
         done = False
         state = env.reset()
         scores = 0
         steps = 0
 
         while not done:
-            s = to_scalar_state(state, env.f_max+1)
+            s = to_scalar_state(state, env.f_max + 1)
             action = agent.choose_action(s)
             a = process_action(action, env.d_max, env.nb_devices)
             next_state, reward, done, _ = env.step(a)
-            s_ = to_scalar_state(next_state, env.f_max+1)
+            s_ = to_scalar_state(next_state, env.f_max + 1)
             agent.update_q_table(reward, a, s, s_, done)
             state = next_state
 
@@ -150,13 +123,43 @@ if __name__ == '__main__':
         json_data['latency_required'].append(np.mean(env.logger['latency_required']))
         json_data['payment_required'].append(np.mean(env.logger['payment_required']))
 
+        file_name = './results/block_fl/q_learning_result_{}.json'.format(test_id)
         if i >= window and i % window == 0:
             with open(file_name, 'w') as outfile:
                 json.dump(json_data, outfile)
             # print(json_data['actions'][i])
 
         print('Episode: {}, epsilon: {}, steps: {}, scores: {}'.format(i + 1, agent.epsilon, steps, scores))
-    print('****************** Q-learning test: {} ends ******************* \n'.format(TEST_ID))
+    print('****************** Q-learning test: {} ends ******************* \n'.format(test_id))
 
 
+if __name__ == '__main__':
+    parameters = {
+        'cumulative_data_threshold': 1000,
+        'tau': 10 ** (-28),
+        'nu': 10 ** 10,
+        'delta': 1,
+        'sigma': 0.6 * 10 ** 9,
+        'training_price': 0.2,
+        'blk_price': 0.8,
+        'data_qualities': [1, 1, 1],  # var_1
+        'alpha_D': 10,
+        'alpha_E': 3,
+        'alpha_L': 1,
+        'alpha_I': 2,
+        'mining_rate_zero': 5,  # 5 blocks/hour
+        'block_arrival_rate': 4,
+        'energy_threshold': 9,
+        'data_threshold': 9,
+        'payment_threshold': 2.955,  # var_1 - 3 devices, 0.2 * D + 0.8 / log(1+m) = 2.955
+        'latency_threshold': 540,
+        'transmission_latency': 0.0193,  # seconds
+        'cross_verify_latency': 0.05,
+        'block_prop_latency': 0.01,
+        'lambda': 4,
+        'training_latency_scale': 1,
+        'blk_latency_scale': 60,  # minutes
+        'penalty_scale': 1,
+    }
 
+    train(test_id=1, nb_episodes=2000, eps=1.0, eps_end=0.1, eps_decay=1500, parameters=parameters)
