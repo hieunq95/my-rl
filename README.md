@@ -10,4 +10,4 @@
 
 #### Deep Reinforcement Learning: DQN
 
-##### All algorithm are tested with [MountainCar-v0](https://github.com/openai/gym/wiki/MountainCar-v0) environment in experiments/. Use plot_learning.py to plot the results.
+##### All algorithms are tested with [MountainCar-v0](https://github.com/openai/gym/wiki/MountainCar-v0) environment in experiments/. Use plot_learning.py to plot the results.
